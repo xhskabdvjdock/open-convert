@@ -1,0 +1,381 @@
+{
+  "schema_version": 1,
+  "verified": true,
+  "tested_at": "2026-10-23T23:32:59.163986+00:00",
+  "engine_versions": {
+    "pillow": "13.0.0",
+    "ffmpeg": "ffmpeg version n9.0.2 Copyright (c) 2000-2026 the FFmpeg developers"
+  },
+  "test_inputs": {
+    "image_formats": [
+      "PNG",
+      "JPEG",
+      "WEBP",
+      "AVIF",
+      "GIF",
+      "TIFF",
+      "BMP"
+    ],
+    "audio_formats": [
+      "wav",
+      "mp3"
+    ],
+    "video_formats": [
+      "mp4",
+      "webm"
+    ]
+  },
+  "image_pairs": [
+    {
+      "input": "PNG",
+      "output": "PNG"
+    },
+    {
+      "input": "PNG",
+      "output": "JPEG"
+    },
+    {
+      "input": "PNG",
+      "output": "WEBP"
+    },
+    {
+      "input": "PNG",
+      "output": "AVIF"
+    },
+    {
+      "input": "PNG",
+      "output": "GIF"
+    },
+    {
+      "input": "PNG",
+      "output": "TIFF"
+    },
+    {
+      "input": "PNG",
+      "output": "BMP"
+    },
+    {
+      "input": "JPEG",
+      "output": "PNG"
+    },
+    {
+      "input": "JPEG",
+      "output": "JPEG"
+    },
+    {
+      "input": "JPEG",
+      "output": "WEBP"
+    },
+    {
+      "input": "JPEG",
+      "output": "AVIF"
+    },
+    {
+      "input": "JPEG",
+      "output": "GIF"
+    },
+    {
+      "input": "JPEG",
+      "output": "TIFF"
+    },
+    {
+      "input": "JPEG",
+      "output": "BMP"
+    },
+    {
+      "input": "WEBP",
+      "output": "PNG"
+    },
+    {
+      "input": "WEBP",
+      "output": "JPEG"
+    },
+    {
+      "input": "WEBP",
+      "output": "WEBP"
+    },
+    {
+      "input": "WEBP",
+      "output": "AVIF"
+    },
+    {
+      "input": "WEBP",
+      "output": "GIF"
+    },
+    {
+      "input": "WEBP",
+      "output": "TIFF"
+    },
+    {
+      "input": "WEBP",
+      "output": "BMP"
+    },
+    {
+      "input": "AVIF",
+      "output": "PNG"
+    },
+    {
+      "input": "AVIF",
+      "output": "JPEG"
+    },
+    {
+      "input": "AVIF",
+      "output": "WEBP"
+    },
+    {
+      "input": "AVIF",
+      "output": "AVIF"
+    },
+    {
+      "input": "AVIF",
+      "output": "GIF"
+    },
+    {
+      "input": "AVIF",
+      "output": "TIFF"
+    },
+    {
+      "input": "AVIF",
+      "output": "BMP"
+    },
+    {
+      "input": "GIF",
+      "output": "PNG"
+    },
+    {
+      "input": "GIF",
+      "output": "JPEG"
+    },
+    {
+      "input": "GIF",
+      "output": "WEBP"
+    },
+    {
+      "input": "GIF",
+      "output": "AVIF"
+    },
+    {
+      "input": "GIF",
+      "output": "GIF"
+    },
+    {
+      "input": "GIF",
+      "output": "TIFF"
+    },
+    {
+      "input": "GIF",
+      "output": "BMP"
+    },
+    {
+      "input": "TIFF",
+      "output": "PNG"
+    },
+    {
+      "input": "TIFF",
+      "output": "JPEG"
+    },
+    {
+      "input": "TIFF",
+      "output": "WEBP"
+    },
+    {
+      "input": "TIFF",
+      "output": "AVIF"
+    },
+    {
+      "input": "TIFF",
+      "output": "GIF"
+    },
+    {
+      "input": "TIFF",
+      "output": "TIFF"
+    },
+    {
+      "input": "TIFF",
+      "output": "BMP"
+    },
+    {
+      "input": "BMP",
+      "output": "PNG"
+    },
+    {
+      "input": "BMP",
+      "output": "JPEG"
+    },
+    {
+      "input": "BMP",
+      "output": "WEBP"
+    },
+    {
+      "input": "BMP",
+      "output": "AVIF"
+    },
+    {
+      "input": "BMP",
+      "output": "GIF"
+    },
+    {
+      "input": "BMP",
+      "output": "TIFF"
+    },
+    {
+      "input": "BMP",
+      "output": "BMP"
+    }
+  ],
+  "audio_pairs": [
+    {
+      "input": "wav",
+      "output": "MP3"
+    },
+    {
+      "input": "wav",
+      "output": "WAV"
+    },
+    {
+      "input": "wav",
+      "output": "FLAC"
+    },
+    {
+      "input": "wav",
+      "output": "AAC"
+    },
+    {
+      "input": "wav",
+      "output": "M4A"
+    },
+    {
+      "input": "wav",
+      "output": "OGG"
+    },
+    {
+      "input": "wav",
+      "output": "OPUS"
+    },
+    {
+      "input": "mp3",
+      "output": "MP3"
+    },
+    {
+      "input": "mp3",
+      "output": "WAV"
+    },
+    {
+      "input": "mp3",
+      "output": "FLAC"
+    },
+    {
+      "input": "mp3",
+      "output": "AAC"
+    },
+    {
+      "input": "mp3",
+      "output": "M4A"
+    },
+    {
+      "input": "mp3",
+      "output": "OGG"
+    },
+    {
+      "input": "mp3",
+      "output": "OPUS"
+    }
+  ],
+  "video_pairs": [
+    {
+      "input": "mp4",
+      "output": "MP4"
+    },
+    {
+      "input": "mp4",
+      "output": "WEBM"
+    },
+    {
+      "input": "mp4",
+      "output": "MOV"
+    },
+    {
+      "input": "mp4",
+      "output": "MKV"
+    },
+    {
+      "input": "mp4",
+      "output": "MP3"
+    },
+    {
+      "input": "mp4",
+      "output": "WAV"
+    },
+    {
+      "input": "mp4",
+      "output": "FLAC"
+    },
+    {
+      "input": "mp4",
+      "output": "AAC"
+    },
+    {
+      "input": "mp4",
+      "output": "M4A"
+    },
+    {
+      "input": "mp4",
+      "output": "OGG"
+    },
+    {
+      "input": "mp4",
+      "output": "OPUS"
+    },
+    {
+      "input": "webm",
+      "output": "MP4"
+    },
+    {
+      "input": "webm",
+      "output": "WEBM"
+    },
+    {
+      "input": "webm",
+      "output": "MOV"
+    },
+    {
+      "input": "webm",
+      "output": "MKV"
+    },
+    {
+      "input": "webm",
+      "output": "MP3"
+    },
+    {
+      "input": "webm",
+      "output": "WAV"
+    },
+    {
+      "input": "webm",
+      "output": "FLAC"
+    },
+    {
+      "input": "webm",
+      "output": "AAC"
+    },
+    {
+      "input": "webm",
+      "output": "M4A"
+    },
+    {
+      "input": "webm",
+      "output": "OGG"
+    },
+    {
+      "input": "webm",
+      "output": "OPUS"
+    }
+  ],
+  "failed_pairs": [],
+  "counts": {
+    "image": 49,
+    "audio": 14,
+    "video": 22,
+    "failed": 0
+  }
+}

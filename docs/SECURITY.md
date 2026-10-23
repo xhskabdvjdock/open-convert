@@ -1,0 +1,7 @@
+# Security notes
+
+The API caps requests, detects image/media formats from file contents, rejects animation, applies EXIF orientation, verifies outputs, sanitizes filenames, and returns `nosniff` and `no-store` headers. FFmpeg reads conversion input from a pipe with the `pipe` protocol allowlisted, avoiding arbitrary input filenames and nested network protocols. FFmpeg work has a timeout and output size limit.
+
+Platform downloading uses a separate yt-dlp subprocess with no cookies or user-supplied flags. The child process validates DNS answers and pins each socket connection to public IPs only, including redirect and CDN hosts; proxy environment variables are cleared. Local/private/link-local/metadata addresses are rejected. `ENABLE_PLATFORM_DOWNLOADS` defaults to true when yt-dlp and ffprobe are installed; set it to false to disable the feature. The service is synchronous and has no production rate-limit system, so restrict public exposure and resource usage. No extractor list is advertised as supported; each URL is analyzed live and the engine's returned formats are shown.
+
+This is a synchronous local development service, not a production multi-user service. It has no persistent jobs, anonymous capabilities, worker sandbox, authentication, rate limiting, durable queue, or object-storage authorization. Do not expose it directly to the public internet. Conversion engines do not run inside a container sandbox in this build.

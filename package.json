@@ -1,0 +1,9 @@
+{
+  "name": "openconvert-workspace",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "api": "npm --prefix apps/web run api",
+    "build": "npm --prefix apps/web run build"
+  }
+}
