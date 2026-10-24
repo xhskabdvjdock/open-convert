@@ -8,6 +8,7 @@ from pathlib import Path
 API_DIR=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(API_DIR))
 import ytdlp_worker as worker
+import standalone as api
 
 
 class YtDlpWorkerTests(unittest.TestCase):
@@ -35,6 +36,11 @@ class YtDlpWorkerTests(unittest.TestCase):
         result=subprocess.run(command,input=json.dumps({"mode":"analyze","url":"http://127.0.0.1:8000/"}).encode(),capture_output=True,timeout=10)
         self.assertNotEqual(result.returncode,0)
         self.assertIn(b"Restricted destination",result.stderr)
+
+    def test_platform_errors_are_mapped_to_actionable_safe_messages(self):
+        self.assertEqual(api.map_ytdlp_error("HTTP Error 429: Too Many Requests").code,"platform_rate_limited")
+        self.assertEqual(api.map_ytdlp_error("Unsupported URL: https://example.invalid").code,"platform_unsupported")
+        self.assertEqual(api.map_ytdlp_error("Sign in to confirm your age").code,"platform_restricted")
 
 
 if __name__=="__main__": unittest.main(verbosity=2)
