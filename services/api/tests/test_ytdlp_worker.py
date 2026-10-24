@@ -42,6 +42,7 @@ class YtDlpWorkerTests(unittest.TestCase):
         self.assertEqual(api.map_ytdlp_error("Unsupported URL: https://example.invalid").code,"platform_unsupported")
         self.assertEqual(api.map_ytdlp_error("Sign in to confirm your age").code,"platform_restricted")
         self.assertEqual(api.map_ytdlp_error("Failed to resolve 'www.youtube.com'").code,"platform_network_error")
+        self.assertEqual(api.map_ytdlp_error("[download] 20512.00kB is larger than max-filesize").code,"download_too_large")
 
     def test_public_youtube_and_x_video_urls_pass_url_validation(self):
         urls=[
@@ -50,6 +51,31 @@ class YtDlpWorkerTests(unittest.TestCase):
         ]
         for url in urls:
             self.assertEqual(api.validate_platform_url(url),url)
+
+    def test_twitter_like_unknown_codecs_merge_video_with_audio(self):
+        # Twitter/X HLS metadata: audio-only entries report acodec None while
+        # vcodec is explicitly "none", and muxed http variants report both
+        # codecs as unknown with a known height.
+        info={"formats":[
+            {"format_id":"hls-audio-128000","vcodec":"none","acodec":None,"abr":128,"protocol":"m3u8_native"},
+            {"format_id":"http-2176","vcodec":None,"acodec":None,"height":548,"protocol":"https"},
+            {"format_id":"hls-566","vcodec":"avc1.64001E","acodec":"none","height":548,"protocol":"m3u8_native"},
+            {"format_id":"hls-312","vcodec":"avc1.4D4015","acodec":"none","height":360,"protocol":"m3u8_native"},
+        ]}
+        options=worker.quality_options(info)
+        self.assertEqual([o["key"] for o in options],["video:548","video:360","audio:best"])
+        self.assertTrue(all(o["has_audio"] for o in options))
+        self.assertEqual(worker.pick_format(info,"video:548"),"hls-566+hls-audio-128000")
+        self.assertEqual(worker.pick_format(info,"audio:best"),"hls-audio-128000")
+
+    def test_video_only_height_falls_back_to_pure_video_stream(self):
+        # A platform that returns video heights without any audio stream still
+        # selects the best video-only format for a requested height.
+        info={"formats":[{"format_id":"v333","vcodec":"avc1","acodec":"none","height":333}]}
+        options=worker.quality_options(info)
+        self.assertEqual([o["key"] for o in options],["video:333"])
+        self.assertEqual([o["has_audio"] for o in options],[False])
+        self.assertEqual(worker.pick_format(info,"video:333"),"v333")
 
     def test_worker_error_marker_survives_dependency_stderr_noise(self):
         stderr=b"warning from downloader\nOPENCONVERT_ERROR:{\"error\":\"extract failed\",\"error_type\":\"ExtractorError\"}\n"

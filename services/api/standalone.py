@@ -82,7 +82,7 @@ def load_verified_registry() -> dict:
 
 
 REGISTRY = load_verified_registry()
-API_VERSION = "0.3.1"
+API_VERSION = "0.3.2"
 
 
 def verified_outputs(family: str, detected: list[str]) -> list[str]:
@@ -264,6 +264,8 @@ def map_ytdlp_error(diagnostic: str) -> ApiError:
         return ApiError(502,"platform_network_error","The platform or its media host could not be reached from this server.")
     if "429" in text or "too many requests" in text or "rate limit" in text:
         return ApiError(429,"platform_rate_limited","The platform is temporarily limiting requests. Wait a while before trying again.")
+    if "max-filesize" in text or "larger than" in text:
+        return ApiError(413,"download_too_large","The selected media is larger than the allowed size limit.")
     if "login" in text or "authentication" in text or "sign in" in text or "private video" in text or "private content" in text:
         return ApiError(403,"platform_restricted","The platform requires access this service does not use, or restricts this media.")
     if "403" in text or "forbidden" in text:

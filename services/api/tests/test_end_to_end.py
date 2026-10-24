@@ -76,7 +76,12 @@ class ConversionE2E(unittest.TestCase):
         conn.request("GET","/api/health");response=conn.getresponse();self.assertEqual(response.status,200);self.assertEqual(json.loads(response.read())["status"],"ok")
         conn.request("GET","/api/capabilities");response=conn.getresponse();cap=json.loads(response.read());conn.close()
         self.assertTrue(cap["registry_verified"])
-        self.assertFalse(cap["media_downloader"]["enabled"])
+        # Enabled state must reflect the actual configuration instead of a
+        # hard-coded value: environments with yt-dlp and ffprobe installed
+        # report platform downloads as enabled.
+        import shutil
+        expected_enabled=bool(api.ENABLE_PLATFORM_DOWNLOADS and api.YTDLP and shutil.which("ffprobe"))
+        self.assertEqual(cap["media_downloader"]["enabled"],expected_enabled)
 
     def test_every_registered_image_pair_over_http(self):
         pairs=api.REGISTRY["image_pairs"]

@@ -36,7 +36,10 @@ def install_public_network_guard():
         if not isinstance(address, tuple) or len(address) < 2:
             raise OSError("Unsupported socket destination")
         host, port = address[0], address[1]
-        records = checked_records(host, port, type=sock.family, proto=sock.proto)
+        # Pass family, type, and protocol positionally: passing the address
+        # family as getaddrinfo's "type" argument made every connect fail
+        # with EAI_SOCKTYPE ("ai_socktype not supported").
+        records = checked_records(host, port, sock.family, sock.type, sock.proto)
         last_error = None
         for family, socktype, proto, _canonname, sockaddr in records:
             if family != sock.family:
@@ -56,10 +59,21 @@ def install_public_network_guard():
         os.environ.pop(key, None)
 
 
+def audio_streams(formats: list[dict]) -> list[dict]:
+    """Formats that carry audio without a video stream.
+
+    Some platforms (Twitter/X HLS) publish audio-only entries with unknown
+    codecs: vcodec "none" with acodec as well as unknown. Treat an explicit
+    vcodec of "none" as audio; otherwise require an audio codec while the
+    video codec is unknown.
+    """
+    return [f for f in formats if f.get("vcodec") == "none" or (f.get("vcodec") is None and f.get("acodec") not in (None, "none"))]
+
+
 def quality_options(info: dict) -> list[dict]:
     formats = info.get("formats") or []
     video = [f for f in formats if f.get("vcodec") not in (None, "none") and isinstance(f.get("height"), int)]
-    audio = [f for f in formats if f.get("acodec") not in (None, "none") and f.get("vcodec") in (None, "none")]
+    audio = audio_streams(formats)
     options=[]
     heights=sorted({f["height"] for f in video}, reverse=True)
     for height in heights:
@@ -85,7 +99,7 @@ def pick_format(info: dict, option_key: str) -> str:
     if option_key not in {option.get("key") for option in quality_options(info)}:
         raise ValueError("Choose one of the analyzed output options")
     if option_key == "audio:best":
-        audio=[f for f in formats if f.get("acodec") not in (None,"none") and safe_format_id(f.get("format_id"))]
+        audio=[f for f in audio_streams(formats) if safe_format_id(f.get("format_id"))]
         if not audio: raise ValueError("No audio-only option is available")
         audio_only=[f for f in audio if f.get("vcodec") in (None,"none")]
         choices=audio_only or audio
@@ -95,7 +109,7 @@ def pick_format(info: dict, option_key: str) -> str:
     if not match: raise ValueError("Choose one of the analyzed output options")
     maximum=int(match.group(1))
     video=[f for f in formats if f.get("vcodec") not in (None,"none") and isinstance(f.get("height"),int) and f["height"]<=maximum and safe_format_id(f.get("format_id"))]
-    audio=[f for f in formats if f.get("acodec") not in (None,"none") and f.get("vcodec") in (None,"none") and safe_format_id(f.get("format_id"))]
+    audio=[f for f in audio_streams(formats) if safe_format_id(f.get("format_id"))]
     if not video: raise ValueError("The selected video quality is no longer available")
     video_only=[f for f in video if f.get("acodec") in (None,"none")]
     if video_only and audio:
@@ -103,6 +117,11 @@ def pick_format(info: dict, option_key: str) -> str:
         a=max(audio,key=lambda f:(f.get("abr") or f.get("tbr") or 0))
         return safe_format_id(v["format_id"])+"+"+safe_format_id(a["format_id"])
     progressive=[f for f in video if f.get("acodec") not in (None,"none")]
+    if not progressive and video_only:
+        # Some platforms expose video heights with no audio stream of any
+        # kind; download the best video-only format instead of failing.
+        chosen=max(video_only,key=lambda f:(f.get("height") or 0,f.get("fps") or 0,f.get("tbr") or 0))
+        return safe_format_id(chosen["format_id"])
     if not progressive: raise ValueError("No compatible audio stream is available for this video")
     chosen=max(progressive,key=lambda f:(f.get("height") or 0,f.get("fps") or 0,f.get("tbr") or 0))
     return safe_format_id(chosen["format_id"])
@@ -123,7 +142,7 @@ def main():
     from yt_dlp import YoutubeDL
     # Keep yt-dlp's normal request headers. A custom product User-Agent can
     # cause otherwise public platform pages to reject extraction requests.
-    options={"quiet":True,"no_warnings":True,"noplaylist":True,"skip_download":True,"cachedir":False,"socket_timeout":10,"retries":1,"extractor_retries":1,"fragment_retries":1,"ignoreerrors":False,"logger":None,"nocheckcertificate":False,"proxy":None}
+    options={"quiet":True,"noprogress":True,"no_warnings":True,"noplaylist":True,"skip_download":True,"cachedir":False,"socket_timeout":10,"retries":1,"extractor_retries":1,"fragment_retries":1,"ignoreerrors":False,"logger":None,"nocheckcertificate":False,"proxy":None}
     if mode=="analyze":
         with YoutubeDL(options) as ydl:
             info=ydl.extract_info(url,download=False)
@@ -150,14 +169,22 @@ def main():
         info=ydl.extract_info(url,download=False)
         if not isinstance(info,dict): raise ValueError("The platform did not return media information")
         selector=pick_format(info,str(option_key or ""))
-        available={safe_format_id(f.get("format_id")) for f in info.get("formats") or []}
-        if any(part not in available for part in selector.split("+")):
-            raise ValueError("Selected format is no longer available")
-        ydl.params.update({"skip_download":False,"format":selector,"outtmpl":str(output_dir/"%(id)s.%(ext)s"),"max_filesize":int(request.get("max_bytes",100*1024*1024)),"overwrites":False,"continuedl":False,"nopart":True,"writethumbnail":False,"writeinfojson":False,"writesubtitles":False,"writeautomaticsub":False,"noplaylist":True,"merge_output_format":"mkv"})
-        if option_key=="audio:best":
-            ydl.params["postprocessors"]=[{"key":"FFmpegExtractAudio","preferredcodec":"best","preferredquality":0}]
-            ydl.params["keepvideo"]=False
-        downloaded=ydl.process_ie_result(info,download=True)
+    available={safe_format_id(f.get("format_id")) for f in info.get("formats") or []}
+    if any(part not in available for part in selector.split("+")):
+        raise ValueError("Selected format is no longer available")
+    # yt-dlp freezes the format selector and postprocessor list at YoutubeDL
+    # construction, and a result that was first extracted with skip_download
+    # set must not be replayed through process_ie_result: replaying a cached
+    # analyzed result failed with HTTP 404 on platform CDN segment URLs. The
+    # downloader instead extracts the platform page again with the selected
+    # format already present in its own construction params.
+    download_options=dict(options)
+    download_options.update({"skip_download":False,"format":selector,"outtmpl":{"default":str(output_dir/"%(id)s.%(ext)s")},"max_filesize":int(request.get("max_bytes",100*1024*1024)),"overwrites":False,"continuedl":False,"nopart":True,"writethumbnail":False,"writeinfojson":False,"writesubtitles":False,"writeautomaticsub":False,"noplaylist":True,"merge_output_format":"mkv"})
+    if option_key=="audio:best":
+        download_options["postprocessors"]=[{"key":"FFmpegExtractAudio","preferredcodec":"best","preferredquality":0}]
+        download_options["keepvideo"]=False
+    with YoutubeDL(download_options) as downloader:
+        downloader.extract_info(url,download=True)
     files=[p for p in output_dir.iterdir() if p.is_file() and p.suffix not in {".part",".ytdl",".json",".jpg",".png",".webp"}]
     if len(files)!=1: raise ValueError("Downloader did not produce exactly one media file")
     print(json.dumps({"id":str(info.get("id") or "")[:120],"title":str(info.get("title") or "Media")[:240],"filename":files[0].name,"path":str(files[0]),"size_bytes":files[0].stat().st_size},ensure_ascii=False))
