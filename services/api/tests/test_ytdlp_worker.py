@@ -41,6 +41,7 @@ class YtDlpWorkerTests(unittest.TestCase):
         self.assertEqual(api.map_ytdlp_error("HTTP Error 429: Too Many Requests").code,"platform_rate_limited")
         self.assertEqual(api.map_ytdlp_error("Unsupported URL: https://example.invalid").code,"platform_unsupported")
         self.assertEqual(api.map_ytdlp_error("Sign in to confirm your age").code,"platform_restricted")
+        self.assertEqual(api.map_ytdlp_error("Failed to resolve 'www.youtube.com'").code,"platform_network_error")
 
     def test_public_youtube_and_x_video_urls_pass_url_validation(self):
         urls=[
