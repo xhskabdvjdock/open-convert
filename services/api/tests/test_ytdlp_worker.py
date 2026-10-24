@@ -42,5 +42,13 @@ class YtDlpWorkerTests(unittest.TestCase):
         self.assertEqual(api.map_ytdlp_error("Unsupported URL: https://example.invalid").code,"platform_unsupported")
         self.assertEqual(api.map_ytdlp_error("Sign in to confirm your age").code,"platform_restricted")
 
+    def test_public_youtube_and_x_video_urls_pass_url_validation(self):
+        urls=[
+            "https://www.youtube.com/watch?v=affZMZfn9xA",
+            "https://x.com/Nostalgicmedias/status/2113541742280818791/video/1",
+        ]
+        for url in urls:
+            self.assertEqual(api.validate_platform_url(url),url)
+
 
 if __name__=="__main__": unittest.main(verbosity=2)
