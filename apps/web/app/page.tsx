@@ -28,7 +28,7 @@ export default function Home() {
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaInfo, setMediaInfo] = useState<{ title:string; extractor:string; duration:number|null; options:{key:string;kind:string;height:number|null;label:string;has_audio:boolean}[] } | null>(null);
   const [mediaBusy, setMediaBusy] = useState(false);
-  const [mediaError, setMediaError] = useState(false);
+  const [mediaError, setMediaError] = useState("");
   const [mediaOption, setMediaOption] = useState("");
   const [downloadEnabled, setDownloadEnabled] = useState(false);
   const [apiOnline, setApiOnline] = useState<boolean | null>(null);
@@ -37,6 +37,24 @@ export default function Home() {
   const [formatRegistry, setFormatRegistry] = useState<{verified:boolean;image_pairs:{input:string;output:string}[];audio_pairs:{input:string;output:string}[];video_pairs:{input:string;output:string}[];engine_versions?:{pillow?:string;ffmpeg?:string}} | null>(null);
   const [resultMessage, setResultMessage] = useState(t.done);
   const input = useRef<HTMLInputElement>(null);
+  const mediaApiError = async (response: Response) => {
+    try {
+      const body = await response.json();
+      const code = body?.detail?.code;
+      const ar = lang === "ar";
+      const messages: Record<string,string> = {
+        platform_network_error: ar ? "تعذّر على الخادم الوصول إلى المنصة أو خادم الوسائط. جرّب لاحقاً." : "The server could not reach the platform or its media host. Try again later.",
+        platform_rate_limited: ar ? "المنصة تحدّ الطلبات مؤقتاً. انتظر قليلاً ثم أعد المحاولة." : "The platform is temporarily rate limiting requests. Wait a while and try again.",
+        platform_restricted: ar ? "المنصة رفضت الوصول أو يتطلب المحتوى تسجيل دخول أو أنه مقيّد جغرافياً." : "The platform denied access; the media may require login or be region-restricted.",
+        no_formats: ar ? "لم تُرجع المنصة صيغاً قابلة للتنزيل لهذا الرابط." : "The platform returned no downloadable formats for this link.",
+        media_unavailable: ar ? "المنصة لم تتيح هذا المحتوى لأداة التنزيل، حتى لو كان يعمل في المتصفح." : "The platform did not make this media available to the downloader, even if it plays in your browser.",
+        platform_unsupported: t.mediaError
+      };
+      if (typeof code === "string" && messages[code]) return messages[code];
+      const message = body?.detail?.message;
+      return typeof message === "string" && message.length <= 280 ? message : t.mediaError;
+    } catch { return t.mediaError; }
+  };
   useEffect(() => {
     const savedLang = localStorage.getItem("openconvert-language");
     const savedTheme = localStorage.getItem("openconvert-theme");
@@ -81,25 +99,25 @@ export default function Home() {
     } catch (cause) { setError(cause instanceof TypeError ? t.apiOffline : t.error); } finally { setBusy(false); }
   };
   const analyzeMedia = async () => {
-    setMediaBusy(true); setMediaError(false); setMediaInfo(null);
+    setMediaBusy(true); setMediaError(""); setMediaInfo(null);
     try {
       const response = await fetch(`${API}/api/download/analyze`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url: mediaUrl}) });
-      if (!response.ok) throw new Error("unsupported platform link");
+      if (!response.ok) throw new Error(await mediaApiError(response));
       const info = await response.json();
       setMediaInfo(info); setMediaOption(info.options?.[0]?.key || "");
-    } catch { setMediaError(true); }
+    } catch (cause) { setMediaError(cause instanceof TypeError ? t.apiOffline : cause instanceof Error ? cause.message : t.mediaError); }
     finally { setMediaBusy(false); }
   };
   useEffect(() => {
     if (!downloadEnabled || !mediaUrl.trim()) return;
     let controller: AbortController | null = null;
     const timer = window.setTimeout(async () => {
-      controller = new AbortController(); setMediaBusy(true); setMediaError(false); setMediaInfo(null); setMediaOption("");
+      controller = new AbortController(); setMediaBusy(true); setMediaError(""); setMediaInfo(null); setMediaOption("");
       try {
         const response = await fetch(`${API}/api/download/analyze`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:mediaUrl.trim()}),signal:controller.signal});
-        if (!response.ok) throw new Error("platform analysis failed");
+        if (!response.ok) throw new Error(await mediaApiError(response));
         const info = await response.json(); setMediaInfo(info); setMediaOption(info.options?.[0]?.key || "");
-      } catch (cause) { if (!(cause instanceof DOMException && cause.name === "AbortError")) setMediaError(true); }
+      } catch (cause) { if (!(cause instanceof DOMException && cause.name === "AbortError")) setMediaError(cause instanceof TypeError ? t.apiOffline : cause instanceof Error ? cause.message : t.mediaError); }
       finally { if (!controller?.signal.aborted) setMediaBusy(false); }
     }, 700);
     return () => {window.clearTimeout(timer); controller?.abort();};
@@ -108,14 +126,14 @@ export default function Home() {
     try {
       const value = await navigator.clipboard.readText();
       if (!value.trim()) throw new Error("empty clipboard");
-      setMediaUrl(value.trim()); setMediaInfo(null); setMediaError(false);
-    } catch { setMediaError(true); }
+      setMediaUrl(value.trim()); setMediaInfo(null); setMediaError("");
+    } catch { setMediaError(t.pasteError); }
   };
   const downloadMedia = async () => {
-    setMediaBusy(true); setMediaError(false);
+    setMediaBusy(true); setMediaError("");
     try {
       const response = await fetch(`${API}/api/download`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({url: mediaUrl,option:mediaOption}) });
-      if (!response.ok) throw new Error("download failed");
+      if (!response.ok) throw new Error(await mediaApiError(response));
       const blob = await response.blob();
       const disposition = response.headers.get("content-disposition") || "";
       const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
@@ -123,7 +141,7 @@ export default function Home() {
       if (result) URL.revokeObjectURL(result.url);
       setResultMessage(t.mediaDone);
       setResult({url: URL.createObjectURL(blob), name});
-    } catch { setMediaError(true); }
+    } catch (cause) { setMediaError(cause instanceof TypeError ? t.apiOffline : cause instanceof Error ? cause.message : t.mediaError); }
     finally { setMediaBusy(false); }
   };
   const describePairs = (pairs: {input:string;output:string}[]) => {
@@ -144,7 +162,7 @@ export default function Home() {
       {result ? <div className="result" role="status"><span className="success-icon"><Check size={17}/></span><span>{resultMessage}</span><a className="primary-btn" href={result.url} download={result.name}><ArrowDownToLine size={16}/>{t.download}</a><button className="again" onClick={() => {URL.revokeObjectURL(result.url); setResult(null); setFile(null); setInspection(null)}}>{t.again}</button></div> : <button className="primary-btn convert-btn" disabled={!file || !inspection || busy || inspecting} onClick={convert}>{busy ? <LoaderCircle className="spin" size={17}/> : <ArrowRight className="directional" size={17}/>} {busy ? t.working : t.action}</button>}
       <div className="fineprint"><ShieldCheck size={15}/><span>{t.private}</span><span className="dot-divider">·</span><span>{t.privateBody}</span></div>
     </div><aside className="workspace-side"><div className="side-block"><div className="kicker">THE PROCESS</div><ol className="steps"><li><span>1</span><div><b>Choose a file</b><small>We inspect its real format</small></div></li><li><span>2</span><div><b>Pick an output</b><small>Only working options appear</small></div></li><li><span>3</span><div><b>Download</b><small>We validate the converted file</small></div></li></ol></div><div className="side-block source-block"><div className="kicker">{t.source.toUpperCase()}</div><div className="source-value">{file ? <><span className="format-chip">{inspection?.format || "…"}</span><span>{inspection ? "Content detected" : t.inspecting}</span></> : <span className="muted">{t.choose}</span>}</div></div><div className="side-foot"><ShieldCheck size={16}/><span>Files are processed privately<br/>and held only for this request.</span></div></aside></section>
-    <section className="download-panel" id="download"><div className="download-label"><span className="kicker">02 / DOWNLOAD</span><span className="status-pill">{apiOnline === false ? "API OFFLINE" : downloadEnabled ? "LIVE LINK CHECK" : "CHECKING"}</span></div><div className="download-content"><h2>{t.downloaderTitle}</h2><p>{apiOnline === false ? <>{t.apiOffline} <a href="/api/health" target="_blank" rel="noreferrer">/api/health</a></> : downloadEnabled ? t.notReady : t.downloadDisabled}</p><div className="url-form"><input aria-label="Media platform URL" type="url" dir="ltr" inputMode="url" placeholder="https://www.youtube.com/watch?v=…" value={mediaUrl} onChange={e => {setMediaUrl(e.target.value); setMediaInfo(null); setMediaOption(""); setMediaError(false)}}/><button className="primary-btn paste-btn" onClick={pasteMediaUrl}>{t.paste}</button><button className="primary-btn" disabled={!downloadEnabled || !mediaUrl || mediaBusy} onClick={analyzeMedia}>{mediaBusy ? <LoaderCircle className="spin" size={16}/> : <Globe2 size={15}/>} {t.analyze}</button></div>{mediaBusy && <p className="analysis-status" role="status"><LoaderCircle className="spin" size={14}/>{t.analyzing}</p>}{mediaError && <p className="error" role="alert">{t.mediaError}</p>}{mediaInfo && <div className="platform-result"><div className="platform-meta"><strong dir="auto">{mediaInfo.title}</strong><small>{mediaInfo.extractor}{mediaInfo.duration ? ` · ${Math.floor(mediaInfo.duration / 60)}:${String(Math.floor(mediaInfo.duration % 60)).padStart(2,"0")}` : ""}</small></div><div className="media-options"><label htmlFor="media-quality">{t.quality}</label><div className="select-wrap"><select id="media-quality" value={mediaOption} onChange={e => setMediaOption(e.target.value)}>{mediaInfo.options.map(option => <option value={option.key} key={option.key}>{option.kind === "audio" ? t.optionAudio : option.label}</option>)}</select><ChevronDown size={15}/></div><button className="primary-btn" disabled={mediaBusy || !mediaOption} onClick={downloadMedia}>{mediaBusy ? <LoaderCircle className="spin" size={16}/> : <ArrowDownToLine size={16}/>} {t.mediaDownload}</button></div></div>}</div><Globe2 className="globe" size={27}/></section>
+    <section className="download-panel" id="download"><div className="download-label"><span className="kicker">02 / DOWNLOAD</span><span className="status-pill">{apiOnline === false ? "API OFFLINE" : downloadEnabled ? "LIVE LINK CHECK" : "CHECKING"}</span></div><div className="download-content"><h2>{t.downloaderTitle}</h2><p>{apiOnline === false ? <>{t.apiOffline} <a href="/api/health" target="_blank" rel="noreferrer">/api/health</a></> : downloadEnabled ? t.notReady : t.downloadDisabled}</p><div className="url-form"><input aria-label="Media platform URL" type="url" dir="ltr" inputMode="url" placeholder="https://www.youtube.com/watch?v=…" value={mediaUrl} onChange={e => {setMediaUrl(e.target.value); setMediaInfo(null); setMediaOption(""); setMediaError("")}}/><button className="primary-btn paste-btn" onClick={pasteMediaUrl}>{t.paste}</button><button className="primary-btn" disabled={!downloadEnabled || !mediaUrl || mediaBusy} onClick={analyzeMedia}>{mediaBusy ? <LoaderCircle className="spin" size={16}/> : <Globe2 size={15}/>} {t.analyze}</button></div>{mediaBusy && <p className="analysis-status" role="status"><LoaderCircle className="spin" size={14}/>{t.analyzing}</p>}{mediaError && <p className="error" role="alert">{mediaError}</p>}{mediaInfo && <div className="platform-result"><div className="platform-meta"><strong dir="auto">{mediaInfo.title}</strong><small>{mediaInfo.extractor}{mediaInfo.duration ? ` · ${Math.floor(mediaInfo.duration / 60)}:${String(Math.floor(mediaInfo.duration % 60)).padStart(2,"0")}` : ""}</small></div><div className="media-options"><label htmlFor="media-quality">{t.quality}</label><div className="select-wrap"><select id="media-quality" value={mediaOption} onChange={e => setMediaOption(e.target.value)}>{mediaInfo.options.map(option => <option value={option.key} key={option.key}>{option.kind === "audio" ? t.optionAudio : option.label}</option>)}</select><ChevronDown size={15}/></div><button className="primary-btn" disabled={mediaBusy || !mediaOption} onClick={downloadMedia}>{mediaBusy ? <LoaderCircle className="spin" size={16}/> : <ArrowDownToLine size={16}/>} {t.mediaDownload}</button></div></div>}</div><Globe2 className="globe" size={27}/></section>
     <section className="info-sections" id="formats"><div><span className="kicker">{t.formats.toUpperCase()}</span><h2>{formatRegistry ? t.formatsIntro : (lang === "ar" ? "سجل الصيغ الموثقة غير متاح حالياً." : "Verified format registry is unavailable.")}</h2></div>{formatRegistry && <div className="registry-list"><p><b>Images</b><span>{describePairs(formatRegistry.image_pairs)}</span></p><p><b>Audio</b><span>{describePairs(formatRegistry.audio_pairs)}</span></p><p><b>Video & audio extraction</b><span>{describePairs(formatRegistry.video_pairs)}</span></p><small>{formatRegistry.engine_versions?.pillow} · {formatRegistry.engine_versions?.ffmpeg}</small></div>}<div id="jobs"><span className="kicker">{t.jobs.toUpperCase()}</span><p>{t.recent}</p></div><div id="help"><span className="kicker">{t.help.toUpperCase()} & PRIVACY</span><p>{t.privacy}</p></div></section>
     <footer><a className="brand footer-brand" href="#top"><span className="brand-icon"><FileImage size={17}/></span>Open<span className="brand-light">Convert</span></a><span>{t.sitefoot}</span><div><a href="#formats">{t.formats}</a><a href="#help">{t.help}</a><a href="#help">Privacy</a></div></footer>
   </main>;
