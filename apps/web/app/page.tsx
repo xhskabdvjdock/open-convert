@@ -48,7 +48,6 @@ export default function Home() {
         platform_restricted: ar ? "المنصة رفضت الوصول أو يتطلب المحتوى تسجيل دخول أو أنه مقيّد جغرافياً." : "The platform denied access; the media may require login or be region-restricted.",
         no_formats: ar ? "لم تُرجع المنصة صيغاً قابلة للتنزيل لهذا الرابط." : "The platform returned no downloadable formats for this link.",
         media_unavailable: ar ? "المنصة لم تتيح هذا المحتوى لأداة التنزيل، حتى لو كان يعمل في المتصفح." : "The platform did not make this media available to the downloader, even if it plays in your browser.",
-        platform_unsupported: t.mediaError
       };
       if (typeof code === "string" && messages[code]) return messages[code];
       const message = body?.detail?.message;
