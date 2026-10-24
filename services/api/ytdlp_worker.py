@@ -70,10 +70,61 @@ def audio_streams(formats: list[dict]) -> list[dict]:
     return [f for f in formats if f.get("vcodec") == "none" or (f.get("vcodec") is None and f.get("acodec") not in (None, "none"))]
 
 
-def quality_options(info: dict) -> list[dict]:
+def estimated_bytes(info: dict, kbps) -> int | None:
+    """Rough transfer-size estimate in bytes for a total kbit/s bitrate."""
+    duration=info.get("duration")
+    if isinstance(kbps,(int,float)) and kbps>0 and isinstance(duration,(int,float)) and duration>0:
+        return int(kbps*1000/8*duration)
+    return None
+
+
+BOT_CHECK_TERMS=("sign in to confirm", "not a bot", "verify you are", "confirm you are")
+
+def extract_with_clients(url: str, base_options: dict, factory) -> dict:
+    """Analyze a URL, retrying YouTube's datacenter sign-in wall with other players.
+
+    Datacenter IPs are frequently throttled by YouTube's default web player
+    check ("Sign in to confirm you're not a bot") while other player clients
+    still answer. The first failure outside that wall is re-raised untouched.
+    """
+    try:
+        with factory(base_options) as ydl:
+            result=ydl.extract_info(url,download=False)
+        if not isinstance(result,dict): raise ValueError("The platform did not return media information")
+        return result
+    except Exception as exc:
+        text=str(exc).lower()
+        if "[youtube]" not in text or not any(term in text for term in BOT_CHECK_TERMS):
+            raise
+        for client in ("tv", "web_embedded", "ios", "mweb"):
+            options=dict(base_options)
+            options["extractor_args"]={"youtube":{"player_client":[client]}}
+            try:
+                with factory(options) as ydl:
+                    result=ydl.extract_info(url,download=False)
+                if isinstance(result,dict): return result
+            except Exception:
+                continue
+        # No client reached the media information inside this size limit; the
+        # original failure then follows the standard diagnostic mapping.
+        raise
+
+
+def quality_options(info: dict, max_bytes: int | None = None) -> list[dict]:
+    """Quality choices derived from the formats the extractor actually returned.
+
+    With max_bytes set, options whose estimated transfer size cannot fit the
+    deployment's configured limit are omitted rather than offered and failing
+    at download time. Estimates need a media duration; without one every
+    option is offered and the size check stays the download-side fallback.
+    """
     formats = info.get("formats") or []
     video = [f for f in formats if f.get("vcodec") not in (None, "none") and isinstance(f.get("height"), int)]
     audio = audio_streams(formats)
+    # Muxed entries carry audio inside the video stream and can serve as the
+    # source for the audio-only extraction when no separate audio format exists.
+    muxed=[f for f in formats if f.get("acodec") not in (None,"none") and f.get("vcodec") not in (None,"none")]
+    audio_kbps=max([(f.get("abr") or f.get("tbr") or 0) for f in audio]+[(f.get("tbr") or 0) for f in muxed]+[0])
     options=[]
     heights=sorted({f["height"] for f in video}, reverse=True)
     for height in heights:
@@ -82,8 +133,21 @@ def quality_options(info: dict) -> list[dict]:
         # selected video stream with the best audio stream using FFmpeg.
         progressive=[f for f in at_height if f.get("acodec") not in (None,"none")]
         split=[f for f in at_height if f.get("acodec") in (None,"none")]
-        options.append({"key":f"video:{height}","kind":"video","height":height,"label":f"{height}p","has_audio":bool(progressive or (split and audio))})
-    if audio or any(f.get("acodec") not in (None,"none") for f in video):
+        has_audio=bool(progressive or (split and audio))
+        if max_bytes is not None:
+            # A merged download transports the video-only stream plus the
+            # separate audio stream, so their sizes add up; a progressive
+            # format's tbr already covers both.
+            expected=max((estimated_bytes(info,f.get("tbr") or 0) or 0 for f in at_height),default=0)
+            if has_audio and split and audio:
+                expected+=estimated_bytes(info,max(audio,key=lambda f:(f.get("abr") or f.get("tbr") or 0)).get("abr") or 0) or 0
+            if expected>max_bytes:
+                continue
+        options.append({"key":f"video:{height}","kind":"video","height":height,"label":f"{height}p","has_audio":has_audio})
+    offer_audio=bool(audio or muxed)
+    if max_bytes is not None:
+        offer_audio=offer_audio and not (audio_kbps>0 and (estimated_bytes(info,audio_kbps) or 0)>max_bytes)
+    if offer_audio:
         options.append({"key":"audio:best","kind":"audio","height":None,"label":"Audio only","has_audio":True})
     return options
 
@@ -100,7 +164,13 @@ def pick_format(info: dict, option_key: str) -> str:
         raise ValueError("Choose one of the analyzed output options")
     if option_key == "audio:best":
         audio=[f for f in audio_streams(formats) if safe_format_id(f.get("format_id"))]
-        if not audio: raise ValueError("No audio-only option is available")
+        if not audio:
+            # Platforms that publish only muxed entries still deliver an
+            # audio-only file through the FFmpeg audio-extraction processor.
+            muxed=[f for f in formats if f.get("acodec") not in (None,"none") and f.get("vcodec") not in (None,"none") and safe_format_id(f.get("format_id"))]
+            if not muxed: raise ValueError("No audio-only option is available")
+            chosen=max(muxed,key=lambda f:(f.get("abr") or f.get("tbr") or 0))
+            return safe_format_id(chosen["format_id"])
         audio_only=[f for f in audio if f.get("vcodec") in (None,"none")]
         choices=audio_only or audio
         chosen=max(choices,key=lambda f:(f.get("abr") or f.get("tbr") or 0))
@@ -144,10 +214,11 @@ def main():
     # cause otherwise public platform pages to reject extraction requests.
     options={"quiet":True,"noprogress":True,"no_warnings":True,"noplaylist":True,"skip_download":True,"cachedir":False,"socket_timeout":10,"retries":1,"extractor_retries":1,"fragment_retries":1,"ignoreerrors":False,"logger":None,"nocheckcertificate":False,"proxy":None}
     if mode=="analyze":
-        with YoutubeDL(options) as ydl:
-            info=ydl.extract_info(url,download=False)
+        info=extract_with_clients(url,options,YoutubeDL)
         if not isinstance(info,dict): raise ValueError("The platform did not return media information")
-        options_out=quality_options(info)
+        requested=request.get("max_bytes")
+        max_bytes=int(requested) if isinstance(requested,(int,float)) and requested>0 else None
+        options_out=quality_options(info,max_bytes)
         if not options_out: raise ValueError("No downloadable audio or video formats were returned")
         print(json.dumps({"id":str(info.get("id") or "")[:120],"title":str(info.get("title") or "Media")[:240],"extractor":str(info.get("extractor_key") or info.get("extractor") or "unknown")[:80],"duration":info.get("duration"),"options":options_out},ensure_ascii=False))
         return
@@ -165,10 +236,9 @@ def main():
         wrapper.write_text("#!/bin/sh\nexec " + shlex.quote(binary) + " -protocol_whitelist file,pipe \"$@\"\n")
         wrapper.chmod(0o700)
     options["ffmpeg_location"]=str(guarded_tools)
-    with YoutubeDL(options) as ydl:
-        info=ydl.extract_info(url,download=False)
-        if not isinstance(info,dict): raise ValueError("The platform did not return media information")
-        selector=pick_format(info,str(option_key or ""))
+    info=extract_with_clients(url,options,YoutubeDL)
+    if not isinstance(info,dict): raise ValueError("The platform did not return media information")
+    selector=pick_format(info,str(option_key or ""))
     available={safe_format_id(f.get("format_id")) for f in info.get("formats") or []}
     if any(part not in available for part in selector.split("+")):
         raise ValueError("Selected format is no longer available")

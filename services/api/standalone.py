@@ -82,7 +82,7 @@ def load_verified_registry() -> dict:
 
 
 REGISTRY = load_verified_registry()
-API_VERSION = "0.3.2"
+API_VERSION = "0.3.3"
 
 
 def verified_outputs(family: str, detected: list[str]) -> list[str]:
@@ -274,7 +274,7 @@ def map_ytdlp_error(diagnostic: str) -> ApiError:
         return ApiError(415,"protected_media","Protected media cannot be downloaded.")
     if "unsupported url" in text or "no suitable extractor" in text:
         return ApiError(422,"platform_unsupported","This link format is not supported by the installed media engine.")
-    if "requested format is not available" in text or "no video formats found" in text or "no downloadable formats" in text:
+    if "requested format is not available" in text or "no video formats found" in text or "no downloadable" in text:
         return ApiError(422,"no_formats","The platform did not provide a downloadable format for this link.")
     if "video unavailable" in text or "media unavailable" in text or "http error 404" in text or "not found" in text:
         return ApiError(404,"media_unavailable","The platform did not make this media available to the downloader. It may still play in your browser.")
@@ -387,7 +387,7 @@ class Handler(BaseHTTPRequestHandler):
                 except (ValueError,TypeError): raise ApiError(422,"invalid_request","A JSON request is required.") from None
                 url=validate_platform_url(data.get("url"))
                 if self.path=="/api/download/analyze":
-                    result=run_ytdlp({"mode":"analyze","url":url},timeout=50)
+                    result=run_ytdlp({"mode":"analyze","url":url,"max_bytes":MAX_UPLOAD},timeout=90)
                     options=result.get("options") or []
                     if not options: raise ApiError(422,"no_formats","The platform did not return downloadable formats.")
                     return self.send_json(200,{"title":result.get("title") or "Media","extractor":result.get("extractor") or "Platform extractor","duration":result.get("duration"),"options":options,"engine":"yt-dlp"})

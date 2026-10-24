@@ -48,6 +48,9 @@ export default function Home() {
         platform_restricted: ar ? "المنصة رفضت الوصول أو يتطلب المحتوى تسجيل دخول أو أنه مقيّد جغرافياً." : "The platform denied access; the media may require login or be region-restricted.",
         no_formats: ar ? "لم تُرجع المنصة صيغاً قابلة للتنزيل لهذا الرابط." : "The platform returned no downloadable formats for this link.",
         media_unavailable: ar ? "المنصة لم تتيح هذا المحتوى لأداة التنزيل، حتى لو كان يعمل في المتصفح." : "The platform did not make this media available to the downloader, even if it plays in your browser.",
+        platform_extraction_failed: ar ? "فشل استخراج المحتوى بعد عدة محاولات. قد تمنع هذه المنصة خوادم الاستضافة أو تطلب وصولاً غير متاح." : "Extraction failed after several attempts. The platform may block hosting servers or require access this service does not use.",
+        download_too_large: ar ? "الوسائط الناتجة أكبر من حد هذا النشر. اختر جودة أدنى أو الصوت فقط." : "The produced media exceeds this deployment's size limit. Choose a lower quality or audio only.",
+        download_validation_failed: ar ? "الملف الناتج عن التنزيل لم يجتز التحقق. أعد المحاولة أو اختر جودة أخرى." : "The downloaded file did not pass validation. Try again or choose another quality.",
       };
       if (typeof code === "string" && messages[code]) return messages[code];
       const message = body?.detail?.message;
