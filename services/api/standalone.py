@@ -82,6 +82,7 @@ def load_verified_registry() -> dict:
 
 
 REGISTRY = load_verified_registry()
+API_VERSION = "0.3.1"
 
 
 def verified_outputs(family: str, detected: list[str]) -> list[str]:
@@ -278,6 +279,21 @@ def map_ytdlp_error(diagnostic: str) -> ApiError:
     return ApiError(422,"platform_unsupported","The link could not be analyzed. It may be restricted, unavailable, or unsupported by the installed media engine.")
 
 
+def parse_worker_failure(stderr: bytes) -> dict:
+    """Read the worker's marked JSON even when a dependency wrote other stderr lines."""
+    marker="OPENCONVERT_ERROR:"
+    lines=stderr.decode("utf-8","replace").splitlines()
+    for line in reversed(lines):
+        candidate=line.split(marker,1)[1] if marker in line else line
+        try:
+            failure=json.loads(candidate)
+        except (ValueError,TypeError):
+            continue
+        if isinstance(failure,dict) and ("error" in failure or "error_type" in failure):
+            return failure
+    return {"error":"Worker exited without a structured diagnostic.","error_type":"WorkerProtocolError"}
+
+
 def run_ytdlp(payload: dict, timeout: int) -> dict:
     if not (ENABLE_PLATFORM_DOWNLOADS and YTDLP and shutil.which("ffprobe")):
         raise ApiError(503,"downloader_unavailable","Platform downloading is disabled or the required engine is unavailable.")
@@ -290,8 +306,7 @@ def run_ytdlp(payload: dict, timeout: int) -> dict:
     except OSError:
         raise ApiError(503,"downloader_unavailable","The platform downloader could not be started.") from None
     if result.returncode:
-        try: failure=json.loads(result.stderr.decode("utf-8","replace"))
-        except (ValueError,AttributeError): failure={}
+        failure=parse_worker_failure(result.stderr)
         diagnostic=str(failure.get("error", "")).lower()
         mapped=map_ytdlp_error(diagnostic)
         if mapped.code=="platform_unsupported":
@@ -332,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204); self.cors(); self.send_header("Access-Control-Allow-Methods","GET, POST, OPTIONS"); self.send_header("Access-Control-Allow-Headers","Content-Type"); self.send_header("Access-Control-Max-Age","600"); self.end_headers()
 
     def do_GET(self):
-        if self.path == "/api/health": return self.send_json(200,{"status":"ok","version":"0.3.0"})
+        if self.path == "/api/health": return self.send_json(200,{"status":"ok","version":API_VERSION})
         if self.path == "/api/capabilities": return self.send_json(200,capability_report())
         if self.path == "/api/formats": return self.send_json(200,REGISTRY)
         self.send_json(404,{"detail":{"code":"not_found","message":"Endpoint not found."}})
