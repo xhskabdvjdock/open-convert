@@ -121,7 +121,9 @@ def main():
         raise ValueError("Only public HTTP(S) media page URLs are accepted")
     install_public_network_guard()
     from yt_dlp import YoutubeDL
-    options={"quiet":True,"no_warnings":True,"noplaylist":True,"skip_download":True,"cachedir":False,"socket_timeout":10,"retries":1,"extractor_retries":1,"fragment_retries":1,"ignoreerrors":False,"logger":None,"nocheckcertificate":False,"proxy":None,"http_headers":{"User-Agent":"OpenConvert/0.3"}}
+    # Keep yt-dlp's normal request headers. A custom product User-Agent can
+    # cause otherwise public platform pages to reject extraction requests.
+    options={"quiet":True,"no_warnings":True,"noplaylist":True,"skip_download":True,"cachedir":False,"socket_timeout":10,"retries":1,"extractor_retries":1,"fragment_retries":1,"ignoreerrors":False,"logger":None,"nocheckcertificate":False,"proxy":None}
     if mode=="analyze":
         with YoutubeDL(options) as ydl:
             info=ydl.extract_info(url,download=False)
@@ -165,5 +167,5 @@ if __name__=="__main__":
     try: main()
     except Exception as exc:
         # No stack traces, URL query strings, or credentials in API output.
-        print(json.dumps({"error":str(exc)[:300]},ensure_ascii=False),file=sys.stderr)
+        print(json.dumps({"error":str(exc)[:300],"error_type":type(exc).__name__},ensure_ascii=False),file=sys.stderr)
         raise SystemExit(2)
