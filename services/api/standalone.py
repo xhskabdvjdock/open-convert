@@ -290,9 +290,15 @@ def run_ytdlp(payload: dict, timeout: int) -> dict:
     except OSError:
         raise ApiError(503,"downloader_unavailable","The platform downloader could not be started.") from None
     if result.returncode:
-        try: diagnostic=json.loads(result.stderr.decode("utf-8","replace")).get("error","").lower()
-        except (ValueError,AttributeError): diagnostic=""
-        raise map_ytdlp_error(diagnostic)
+        try: failure=json.loads(result.stderr.decode("utf-8","replace"))
+        except (ValueError,AttributeError): failure={}
+        diagnostic=str(failure.get("error", "")).lower()
+        mapped=map_ytdlp_error(diagnostic)
+        if mapped.code=="platform_unsupported":
+            error_type=re.sub(r"[^A-Za-z0-9_.-]", "", str(failure.get("error_type", "")))[:48]
+            if error_type:
+                mapped=ApiError(mapped.status,"platform_extraction_failed",f"Media extractor error ({error_type}). The link may be unavailable, restricted, or unsupported.")
+        raise mapped
     try: return json.loads(result.stdout)
     except (ValueError,UnicodeDecodeError): raise ApiError(502,"invalid_platform_response","The platform returned invalid media information.") from None
 
