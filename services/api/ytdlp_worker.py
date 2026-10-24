@@ -167,5 +167,6 @@ if __name__=="__main__":
     try: main()
     except Exception as exc:
         # No stack traces, URL query strings, or credentials in API output.
-        print(json.dumps({"error":str(exc)[:300],"error_type":type(exc).__name__},ensure_ascii=False),file=sys.stderr)
+        record=json.dumps({"error":str(exc)[:300],"error_type":type(exc).__name__},ensure_ascii=False)
+        print("OPENCONVERT_ERROR:"+record,file=sys.stderr)
         raise SystemExit(2)
