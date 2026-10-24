@@ -51,5 +51,11 @@ class YtDlpWorkerTests(unittest.TestCase):
         for url in urls:
             self.assertEqual(api.validate_platform_url(url),url)
 
+    def test_worker_error_marker_survives_dependency_stderr_noise(self):
+        stderr=b"warning from downloader\nOPENCONVERT_ERROR:{\"error\":\"extract failed\",\"error_type\":\"ExtractorError\"}\n"
+        failure=api.parse_worker_failure(stderr)
+        self.assertEqual(failure["error_type"],"ExtractorError")
+        self.assertEqual(failure["error"],"extract failed")
+
 
 if __name__=="__main__": unittest.main(verbosity=2)
