@@ -257,6 +257,27 @@ def capability_report():
     return {"engines":{"images":f"Pillow {Image.__version__}","media":ffmpeg_version(),"probe":bool(shutil.which("ffprobe")),"yt_dlp":ytdlp_version},"max_upload_bytes":MAX_UPLOAD,"max_image_upload_bytes":MAX_IMAGE,"max_media_output_bytes":MAX_OUTPUT,"verified_registry":"/api/formats","registry_verified":REGISTRY.get("verified",False),"media_downloader":{"enabled":platform_enabled,"direct_file_urls":False,"platform_urls":platform_enabled,"engine":"yt-dlp" if YTDLP else None,"integration_tested":False,"reason":"Each public URL is analyzed live; unsupported or restricted links fail explicitly. Set ENABLE_PLATFORM_DOWNLOADS=false to disable." if platform_enabled else "yt-dlp or ffprobe is unavailable, or platform downloads were disabled by configuration."}}
 
 
+def map_ytdlp_error(diagnostic: str) -> ApiError:
+    text=diagnostic.lower()
+    if any(value in text for value in ("restricted destination", "name or service not known", "temporary failure in name resolution", "could not resolve", "failed to resolve", "connection timed out")):
+        return ApiError(502,"platform_network_error","The platform or its media host could not be reached from this server.")
+    if "429" in text or "too many requests" in text or "rate limit" in text:
+        return ApiError(429,"platform_rate_limited","The platform is temporarily limiting requests. Wait a while before trying again.")
+    if "login" in text or "authentication" in text or "sign in" in text or "private video" in text or "private content" in text:
+        return ApiError(403,"platform_restricted","The platform requires access this service does not use, or restricts this media.")
+    if "403" in text or "forbidden" in text:
+        return ApiError(403,"platform_restricted","The platform denied this server's request. The link may require access or may be region-restricted.")
+    if "drm" in text or "encrypted" in text:
+        return ApiError(415,"protected_media","Protected media cannot be downloaded.")
+    if "unsupported url" in text or "no suitable extractor" in text:
+        return ApiError(422,"platform_unsupported","This link format is not supported by the installed media engine.")
+    if "requested format is not available" in text or "no video formats found" in text or "no downloadable formats" in text:
+        return ApiError(422,"no_formats","The platform did not provide a downloadable format for this link.")
+    if "video unavailable" in text or "media unavailable" in text or "http error 404" in text or "not found" in text:
+        return ApiError(404,"media_unavailable","The platform did not make this media available to the downloader. It may still play in your browser.")
+    return ApiError(422,"platform_unsupported","The link could not be analyzed. It may be restricted, unavailable, or unsupported by the installed media engine.")
+
+
 def run_ytdlp(payload: dict, timeout: int) -> dict:
     if not (ENABLE_PLATFORM_DOWNLOADS and YTDLP and shutil.which("ffprobe")):
         raise ApiError(503,"downloader_unavailable","Platform downloading is disabled or the required engine is unavailable.")
@@ -271,13 +292,7 @@ def run_ytdlp(payload: dict, timeout: int) -> dict:
     if result.returncode:
         try: diagnostic=json.loads(result.stderr.decode("utf-8","replace")).get("error","").lower()
         except (ValueError,AttributeError): diagnostic=""
-        if "restricted destination" in diagnostic or "resolve" in diagnostic or "name or service" in diagnostic:
-            raise ApiError(502,"platform_network_error","The platform or its media host could not be reached safely.")
-        if "login" in diagnostic or "authentication" in diagnostic or "private" in diagnostic:
-            raise ApiError(403,"platform_restricted","This media requires access that this downloader does not use.")
-        if "drm" in diagnostic or "encrypted" in diagnostic:
-            raise ApiError(415,"protected_media","Protected media cannot be downloaded.")
-        raise ApiError(422,"platform_unsupported","The link is unsupported, unavailable, or does not expose downloadable media.")
+        raise map_ytdlp_error(diagnostic)
     try: return json.loads(result.stdout)
     except (ValueError,UnicodeDecodeError): raise ApiError(502,"invalid_platform_response","The platform returned invalid media information.") from None
 
